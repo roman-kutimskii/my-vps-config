@@ -5,8 +5,6 @@
   remote_user: root
   vars:
     ansible_password: "{{ vault_root_ssh_password }}"
-    dev_password_hash: >-
-      {{ vault_dev_password | password_hash('sha512', 'devsalt') }}
 
   handlers:
     - name: Restart ssh
@@ -18,8 +16,8 @@
     - name: Validate target OS
       ansible.builtin.assert:
         that:
-          - ansible_distribution == 'Ubuntu'
-          - ansible_distribution_version == '24.04'
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_version'] == '24.04'
         fail_msg: This project supports only Ubuntu 24.04 LTS.
 
     - name: Validate required bootstrap variables
@@ -28,6 +26,8 @@
           - dev_authorized_key is match('^ssh-')
           - vault_root_ssh_password != 'REPLACE_ME'
           - vault_dev_password != 'REPLACE_ME'
+          - vault_dev_password_hash != 'REPLACE_ME'
+          - vault_dev_password_hash is match('^\$6\$')
         fail_msg: Fill required bootstrap variables and secrets before running bootstrap.yml.
 
     - name: Install bootstrap packages
@@ -40,7 +40,7 @@
     - name: Create dev user
       ansible.builtin.user:
         name: dev
-        password: "{{ dev_password_hash }}"
+        password: "{{ vault_dev_password_hash }}"
         update_password: always
         shell: /bin/bash
         groups: sudo

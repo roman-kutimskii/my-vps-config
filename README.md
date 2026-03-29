@@ -22,7 +22,7 @@
 - `ansible_host`
 - при необходимости `ansible_port`
 
-`group_vars/all.yml`
+`group_vars/all/main.yml`
 
 - `opencode_domain`
 - `dev_authorized_key`
@@ -32,12 +32,27 @@
 
 - `vault_root_ssh_password`
 - `vault_dev_password`
+- `vault_dev_password_hash`
 - `vault_opencode_server_password`
+
+`vault_dev_password_hash` должен содержать готовый SHA-512 crypt hash пароля для Linux-пользователя `dev`, например вида `$6$...`.
+
+Сгенерировать его можно локально так:
+
+```bash
+openssl passwd -6
+```
 
 После заполнения зашифровать secrets:
 
 ```bash
 ansible-vault encrypt group_vars/all/vault.yml
+```
+
+Установить коллекции:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
 ```
 
 ## Запуск

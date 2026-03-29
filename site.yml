@@ -22,8 +22,8 @@
     - name: Validate target OS
       ansible.builtin.assert:
         that:
-          - ansible_distribution == 'Ubuntu'
-          - ansible_distribution_version == '24.04'
+          - ansible_facts["distribution"] == 'Ubuntu'
+          - ansible_facts["distribution_version"] == '24.04'
         fail_msg: This project supports only Ubuntu 24.04 LTS.
 
     - name: Validate required site variables
@@ -89,10 +89,16 @@
         opts: sw
         state: present
 
+    - name: Check active swap devices
+      ansible.builtin.command:
+        cmd: swapon --noheadings --show=NAME
+      register: active_swap_devices
+      changed_when: false
+
     - name: Enable swapfile
       ansible.builtin.command:
         cmd: "swapon {{ swapfile_path }}"
-      when: (ansible_swaptotal_mb | int) < (swapfile_size_mb | int)
+      when: swapfile_path not in active_swap_devices.stdout_lines
 
     - name: Set UFW default incoming policy
       ansible.builtin.command:
@@ -151,7 +157,7 @@
         repo: >-
           deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
           https://download.docker.com/linux/ubuntu
-          {{ ansible_distribution_release }} stable
+          {{ ansible_facts["distribution_release"] }} stable
         filename: docker
         state: present
 
