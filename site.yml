@@ -1,0 +1,9 @@
+---
+- name: Configure VPS base services
+  hosts: all
+  gather_facts: true
+  remote_user: "{{ managed_ansible_user }}"
+  become: true
+  vars:
+    ansible_become_password: "{{ vault_dev_password }}"
+  tasks: []

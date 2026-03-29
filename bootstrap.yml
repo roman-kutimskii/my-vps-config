@@ -1,0 +1,8 @@
+---
+- name: Bootstrap VPS access
+  hosts: all
+  gather_facts: true
+  remote_user: "{{ bootstrap_ansible_user }}"
+  vars:
+    ansible_password: "{{ vault_root_ssh_password }}"
+  tasks: []

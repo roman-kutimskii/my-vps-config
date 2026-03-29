@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenCode web service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ dev_user }}
+WorkingDirectory={{ dev_home }}
+Environment=OPENCODE_SERVER_PASSWORD={{ vault_opencode_server_password }}
+ExecStart=/usr/local/bin/opencode web --host {{ opencode_host }} --port {{ opencode_port }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
