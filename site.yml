@@ -6,4 +6,142 @@
   become: true
   vars:
     ansible_become_password: "{{ vault_dev_password }}"
-  tasks: []
+
+  pre_tasks:
+    - name: Validate target OS
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_version == '24.04'
+        fail_msg: This project supports only Ubuntu 24.04 LTS.
+
+    - name: Validate required site variables
+      ansible.builtin.assert:
+        that:
+          - dev_user | length > 0
+          - server_timezone | length > 0
+          - swapfile_path | length > 0
+          - (swapfile_size_mb | int) > 0
+          - vault_dev_password != 'REPLACE_ME'
+        fail_msg: Fill required site variables and secrets before running site.yml.
+
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name: "{{ base_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Set timezone symlink
+      ansible.builtin.file:
+        src: "/usr/share/zoneinfo/{{ server_timezone }}"
+        dest: /etc/localtime
+        state: link
+        force: true
+
+    - name: Write timezone file
+      ansible.builtin.copy:
+        dest: /etc/timezone
+        content: "{{ server_timezone }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Check swapfile state
+      ansible.builtin.stat:
+        path: "{{ swapfile_path }}"
+      register: swapfile_stat
+
+    - name: Allocate swapfile
+      ansible.builtin.command:
+        cmd: "fallocate -l {{ swapfile_size_mb }}M {{ swapfile_path }}"
+      when: not swapfile_stat.stat.exists
+
+    - name: Set swapfile permissions
+      ansible.builtin.file:
+        path: "{{ swapfile_path }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Initialize swapfile
+      ansible.builtin.command:
+        cmd: "mkswap {{ swapfile_path }}"
+      when: not swapfile_stat.stat.exists
+
+    - name: Persist swapfile mount
+      ansible.posix.mount:
+        path: none
+        src: "{{ swapfile_path }}"
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Enable swapfile
+      ansible.builtin.command:
+        cmd: "swapon {{ swapfile_path }}"
+      when: (ansible_swaptotal_mb | int) < (swapfile_size_mb | int)
+
+    - name: Allow SSH through UFW
+      ansible.builtin.command:
+        cmd: ufw allow 22/tcp
+      register: ufw_ssh
+      changed_when: "'Rule added' in ufw_ssh.stdout or 'updated' in ufw_ssh.stdout"
+
+    - name: Allow HTTP through UFW
+      ansible.builtin.command:
+        cmd: ufw allow 80/tcp
+      register: ufw_http
+      changed_when: "'Rule added' in ufw_http.stdout or 'updated' in ufw_http.stdout"
+
+    - name: Allow HTTPS through UFW
+      ansible.builtin.command:
+        cmd: ufw allow 443/tcp
+      register: ufw_https
+      changed_when: "'Rule added' in ufw_https.stdout or 'updated' in ufw_https.stdout"
+
+    - name: Enable UFW
+      ansible.builtin.command:
+        cmd: ufw --force enable
+      register: ufw_enable
+      changed_when: "'Firewall is active' not in ufw_enable.stdout"
+
+    - name: Create Docker apt keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install Docker repository key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: "{{ docker_apt_keyring }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure Docker repository
+      ansible.builtin.apt_repository:
+        repo: "{{ docker_apt_repo }}"
+        filename: docker
+        state: present
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker service is enabled
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Add dev user to docker group
+      ansible.builtin.user:
+        name: "{{ dev_user }}"
+        groups: docker
+        append: true
