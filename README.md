@@ -13,7 +13,7 @@
 
 - целевой сервер: Ubuntu 24.04 LTS
 - первый вход возможен как `root` по SSH-паролю
-- DNS для `opencode.example.com` уже указывает на VPS перед запуском `site.yml`
+- DNS для домена из `opencode_domain` уже указывает на VPS перед запуском `site.yml`
 
 ## Что заполнить
 
@@ -21,11 +21,13 @@
 
 - `ansible_host`
 - при необходимости `ansible_port`
+- при необходимости `bootstrap_ansible_user` и `managed_ansible_user`
 
 `group_vars/all.yml`
 
 - `opencode_domain`
 - `dev_authorized_key`
+- при необходимости `server_timezone`, `swapfile_size_mb`, `dev_projects_dir`
 
 `group_vars/all/vault.yml`
 
@@ -53,6 +55,8 @@ ansible-playbook bootstrap.yml --ask-vault-pass
 ansible-playbook site.yml --ask-vault-pass
 ```
 
+Порядок всегда один: сначала `bootstrap.yml`, потом `site.yml`.
+
 ## Результат
 
 После завершения:
@@ -60,4 +64,5 @@ ansible-playbook site.yml --ask-vault-pass
 - вход по SSH идет как `dev` по ключу
 - `dev` может использовать `sudo` по паролю
 - на сервере работают Docker, OpenCode и Caddy
-- OpenCode доступен по `https://opencode.example.com`
+- каталог `/home/dev/projects` создан для проектов
+- OpenCode доступен по `https://<opencode_domain>`

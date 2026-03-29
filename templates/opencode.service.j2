@@ -7,8 +7,9 @@ Wants=network-online.target
 Type=simple
 User={{ dev_user }}
 WorkingDirectory={{ dev_home }}
-Environment=OPENCODE_SERVER_PASSWORD={{ vault_opencode_server_password }}
-ExecStart=/usr/local/bin/opencode web --host {{ opencode_host }} --port {{ opencode_port }}
+Environment=HOME={{ dev_home }}
+EnvironmentFile=/etc/opencode.env
+ExecStart={{ opencode_binary }} web --hostname {{ opencode_host }} --port {{ opencode_port }}
 Restart=on-failure
 RestartSec=5
 

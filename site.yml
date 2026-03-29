@@ -7,6 +7,17 @@
   vars:
     ansible_become_password: "{{ vault_dev_password }}"
 
+  handlers:
+    - name: Restart opencode
+      ansible.builtin.service:
+        name: opencode
+        state: restarted
+
+    - name: Restart caddy
+      ansible.builtin.service:
+        name: caddy
+        state: restarted
+
   pre_tasks:
     - name: Validate target OS
       ansible.builtin.assert:
@@ -22,7 +33,10 @@
           - server_timezone | length > 0
           - swapfile_path | length > 0
           - (swapfile_size_mb | int) > 0
+          - opencode_domain | length > 0
+          - opencode_binary | length > 0
           - vault_dev_password != 'REPLACE_ME'
+          - vault_opencode_server_password != 'REPLACE_ME'
         fail_msg: Fill required site variables and secrets before running site.yml.
 
   tasks:
@@ -81,6 +95,18 @@
       ansible.builtin.command:
         cmd: "swapon {{ swapfile_path }}"
       when: (ansible_swaptotal_mb | int) < (swapfile_size_mb | int)
+
+    - name: Set UFW default incoming policy
+      ansible.builtin.command:
+        cmd: ufw default deny incoming
+      register: ufw_incoming
+      changed_when: "'Default incoming policy changed' in ufw_incoming.stdout"
+
+    - name: Set UFW default outgoing policy
+      ansible.builtin.command:
+        cmd: ufw default allow outgoing
+      register: ufw_outgoing
+      changed_when: "'Default outgoing policy changed' in ufw_outgoing.stdout"
 
     - name: Allow SSH through UFW
       ansible.builtin.command:
@@ -145,3 +171,81 @@
         name: "{{ dev_user }}"
         groups: docker
         append: true
+
+    - name: Install OpenCode for dev user
+      ansible.builtin.shell: >-
+        curl -fsSL {{ opencode_install_script_url }} | bash -s -- --no-modify-path
+      args:
+        creates: "{{ opencode_binary }}"
+      become_user: "{{ dev_user }}"
+
+    - name: Install OpenCode systemd unit
+      ansible.builtin.template:
+        src: templates/opencode.service.j2
+        dest: /etc/systemd/system/opencode.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart opencode
+
+    - name: Install OpenCode environment file
+      ansible.builtin.template:
+        src: templates/opencode.env.j2
+        dest: /etc/opencode.env
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Restart opencode
+
+    - name: Reload systemd manager
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Ensure OpenCode service is enabled
+      ansible.builtin.service:
+        name: opencode
+        enabled: true
+        state: started
+
+    - name: Install Caddy
+      ansible.builtin.apt:
+        name: "{{ caddy_packages }}"
+        state: present
+
+    - name: Install Caddyfile
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart caddy
+
+    - name: Ensure Caddy service is enabled
+      ansible.builtin.service:
+        name: caddy
+        enabled: true
+        state: started
+
+    - name: Flush service handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify OpenCode requires password locally
+      ansible.builtin.uri:
+        url: "http://{{ opencode_host }}:{{ opencode_port }}/"
+        status_code:
+          - 401
+      register: opencode_local_check
+      retries: 10
+      delay: 3
+      until: opencode_local_check.status == 401
+
+    - name: Verify public HTTPS endpoint responds
+      ansible.builtin.uri:
+        url: "https://{{ opencode_domain }}/"
+        status_code:
+          - 401
+      register: opencode_https_check
+      retries: 10
+      delay: 6
+      until: opencode_https_check.status == 401

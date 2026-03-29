@@ -29,6 +29,7 @@
           - dev_home | length > 0
           - dev_projects_dir | length > 0
           - dev_authorized_key is match('^ssh-')
+          - "'REPLACE_ME' not in dev_authorized_key"
           - vault_root_ssh_password != 'REPLACE_ME'
           - vault_dev_password != 'REPLACE_ME'
         fail_msg: Fill required bootstrap variables and secrets before running bootstrap.yml.

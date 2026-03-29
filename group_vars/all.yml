@@ -12,6 +12,8 @@ swapfile_size_mb: 2048
 opencode_domain: opencode.example.com
 opencode_host: 127.0.0.1
 opencode_port: 4096
+opencode_install_script_url: https://opencode.ai/install
+opencode_binary: "{{ dev_home }}/.opencode/bin/opencode"
 
 bootstrap_packages:
   - sudo
