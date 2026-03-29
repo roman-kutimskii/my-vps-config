@@ -3,6 +3,7 @@ dev_group: dev
 dev_home: /home/dev
 dev_projects_dir: /home/dev/projects
 dev_authorized_key: "ssh-ed25519 REPLACE_ME"
+dev_password_hash_salt: devsudo123456789
 
 server_timezone: Europe/Moscow
 swapfile_path: /swapfile

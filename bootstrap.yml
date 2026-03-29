@@ -5,4 +5,72 @@
   remote_user: "{{ bootstrap_ansible_user }}"
   vars:
     ansible_password: "{{ vault_root_ssh_password }}"
-  tasks: []
+    dev_password_hash: >-
+      {{ vault_dev_password | password_hash('sha512', dev_password_hash_salt) }}
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+
+  tasks:
+    - name: Validate target OS
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_version == '24.04'
+        fail_msg: This project supports only Ubuntu 24.04 LTS.
+
+    - name: Validate required bootstrap variables
+      ansible.builtin.assert:
+        that:
+          - dev_user | length > 0
+          - dev_home | length > 0
+          - dev_projects_dir | length > 0
+          - dev_authorized_key is match('^ssh-')
+          - vault_root_ssh_password != 'REPLACE_ME'
+          - vault_dev_password != 'REPLACE_ME'
+        fail_msg: Fill required bootstrap variables and secrets before running bootstrap.yml.
+
+    - name: Install bootstrap packages
+      ansible.builtin.apt:
+        name: "{{ bootstrap_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Create dev user
+      ansible.builtin.user:
+        name: "{{ dev_user }}"
+        password: "{{ dev_password_hash }}"
+        update_password: always
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        create_home: true
+
+    - name: Install authorized key for dev
+      ansible.posix.authorized_key:
+        user: "{{ dev_user }}"
+        state: present
+        key: "{{ dev_authorized_key }}"
+
+    - name: Create projects directory
+      ansible.builtin.file:
+        path: "{{ dev_projects_dir }}"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0755'
+
+    - name: Configure SSH bootstrap restrictions
+      ansible.builtin.template:
+        src: templates/sshd_config.d/99-bootstrap.conf.j2
+        dest: /etc/ssh/sshd_config.d/99-bootstrap.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart ssh
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
