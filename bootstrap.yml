@@ -2,11 +2,11 @@
 - name: Bootstrap VPS access
   hosts: all
   gather_facts: true
-  remote_user: "{{ bootstrap_ansible_user }}"
+  remote_user: root
   vars:
     ansible_password: "{{ vault_root_ssh_password }}"
     dev_password_hash: >-
-      {{ vault_dev_password | password_hash('sha512', dev_password_hash_salt) }}
+      {{ vault_dev_password | password_hash('sha512', 'devsalt') }}
 
   handlers:
     - name: Restart ssh
@@ -25,24 +25,21 @@
     - name: Validate required bootstrap variables
       ansible.builtin.assert:
         that:
-          - dev_user | length > 0
-          - dev_home | length > 0
-          - dev_projects_dir | length > 0
           - dev_authorized_key is match('^ssh-')
-          - "'REPLACE_ME' not in dev_authorized_key"
           - vault_root_ssh_password != 'REPLACE_ME'
           - vault_dev_password != 'REPLACE_ME'
         fail_msg: Fill required bootstrap variables and secrets before running bootstrap.yml.
 
     - name: Install bootstrap packages
       ansible.builtin.apt:
-        name: "{{ bootstrap_packages }}"
+        name:
+          - sudo
         state: present
         update_cache: true
 
     - name: Create dev user
       ansible.builtin.user:
-        name: "{{ dev_user }}"
+        name: dev
         password: "{{ dev_password_hash }}"
         update_password: always
         shell: /bin/bash
@@ -52,16 +49,16 @@
 
     - name: Install authorized key for dev
       ansible.posix.authorized_key:
-        user: "{{ dev_user }}"
+        user: dev
         state: present
         key: "{{ dev_authorized_key }}"
 
     - name: Create projects directory
       ansible.builtin.file:
-        path: "{{ dev_projects_dir }}"
+        path: /home/dev/projects
         state: directory
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
+        owner: dev
+        group: dev
         mode: '0755'
 
     - name: Configure SSH bootstrap restrictions

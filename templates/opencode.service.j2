@@ -5,11 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User={{ dev_user }}
-WorkingDirectory={{ dev_home }}
-Environment=HOME={{ dev_home }}
+User=dev
+WorkingDirectory=/home/dev
+Environment=HOME=/home/dev
 EnvironmentFile=/etc/opencode.env
-ExecStart={{ opencode_binary }} web --hostname {{ opencode_host }} --port {{ opencode_port }}
+ExecStart=/home/dev/.opencode/bin/opencode web --hostname 127.0.0.1 --port 4096
 Restart=on-failure
 RestartSec=5
 

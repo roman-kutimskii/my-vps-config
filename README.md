@@ -21,13 +21,12 @@
 
 - `ansible_host`
 - при необходимости `ansible_port`
-- при необходимости `bootstrap_ansible_user` и `managed_ansible_user`
 
 `group_vars/all.yml`
 
 - `opencode_domain`
 - `dev_authorized_key`
-- при необходимости `server_timezone`, `swapfile_size_mb`, `dev_projects_dir`
+- при необходимости `server_timezone` и `swapfile_size_mb`
 
 `group_vars/all/vault.yml`
 

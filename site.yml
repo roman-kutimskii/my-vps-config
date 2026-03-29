@@ -2,7 +2,7 @@
 - name: Configure VPS base services
   hosts: all
   gather_facts: true
-  remote_user: "{{ managed_ansible_user }}"
+  remote_user: dev
   become: true
   vars:
     ansible_become_password: "{{ vault_dev_password }}"
@@ -29,12 +29,10 @@
     - name: Validate required site variables
       ansible.builtin.assert:
         that:
-          - dev_user | length > 0
           - server_timezone | length > 0
           - swapfile_path | length > 0
           - (swapfile_size_mb | int) > 0
           - opencode_domain | length > 0
-          - opencode_binary | length > 0
           - vault_dev_password != 'REPLACE_ME'
           - vault_opencode_server_password != 'REPLACE_ME'
         fail_msg: Fill required site variables and secrets before running site.yml.
@@ -143,20 +141,28 @@
     - name: Install Docker repository key
       ansible.builtin.get_url:
         url: https://download.docker.com/linux/ubuntu/gpg
-        dest: "{{ docker_apt_keyring }}"
+        dest: /etc/apt/keyrings/docker.asc
         owner: root
         group: root
         mode: '0644'
 
     - name: Configure Docker repository
       ansible.builtin.apt_repository:
-        repo: "{{ docker_apt_repo }}"
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu
+          {{ ansible_distribution_release }} stable
         filename: docker
         state: present
 
     - name: Install Docker packages
       ansible.builtin.apt:
-        name: "{{ docker_packages }}"
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
         state: present
         update_cache: true
 
@@ -168,16 +174,16 @@
 
     - name: Add dev user to docker group
       ansible.builtin.user:
-        name: "{{ dev_user }}"
+        name: dev
         groups: docker
         append: true
 
     - name: Install OpenCode for dev user
       ansible.builtin.shell: >-
-        curl -fsSL {{ opencode_install_script_url }} | bash -s -- --no-modify-path
+        curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
       args:
-        creates: "{{ opencode_binary }}"
-      become_user: "{{ dev_user }}"
+        creates: /home/dev/.opencode/bin/opencode
+      become_user: dev
 
     - name: Install OpenCode systemd unit
       ansible.builtin.template:
@@ -209,7 +215,7 @@
 
     - name: Install Caddy
       ansible.builtin.apt:
-        name: "{{ caddy_packages }}"
+        name: caddy
         state: present
 
     - name: Install Caddyfile
@@ -232,7 +238,7 @@
 
     - name: Verify OpenCode requires password locally
       ansible.builtin.uri:
-        url: "http://{{ opencode_host }}:{{ opencode_port }}/"
+        url: http://127.0.0.1:4096/
         status_code:
           - 401
       register: opencode_local_check
