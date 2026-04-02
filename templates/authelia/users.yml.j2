@@ -1,0 +1,6 @@
+users:
+  {{ authelia_username | to_json }}:
+    disabled: false
+    displayname: {{ authelia_display_name | default(authelia_username, true) | to_json }}
+    password: {{ vault_authelia_password_hash | to_json }}
+    groups: []

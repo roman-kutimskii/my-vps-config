@@ -4,7 +4,11 @@ server_timezone: Europe/Moscow
 swapfile_path: /swapfile
 swapfile_size_mb: 2048
 
-opencode_domain: opencode.example.com
+root_domain: example.com
+
+authelia_username: dev
+authelia_display_name: Dev User
+authelia_dir: /opt/authelia
 
 base_packages:
   - git

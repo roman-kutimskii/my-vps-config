@@ -1,0 +1,23 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --requirepass
+      - {{ vault_authelia_redis_password | to_json }}
+
+  authelia:
+    image: authelia/authelia:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - '127.0.0.1:9091:9091'
+    volumes:
+      - '{{ authelia_config_dir }}:/config:ro'
+      - '{{ authelia_data_dir }}:/data'

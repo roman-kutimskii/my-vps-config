@@ -8,7 +8,6 @@ Type=simple
 User=dev
 WorkingDirectory=/home/dev
 Environment=HOME=/home/dev
-EnvironmentFile=/etc/opencode.env
 ExecStart=/home/dev/.opencode/bin/opencode web --hostname 127.0.0.1 --port 4096
 Restart=on-failure
 RestartSec=5
