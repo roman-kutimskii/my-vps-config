@@ -1,4 +1,7 @@
 vault_root_ssh_password: REPLACE_ME
 vault_dev_password: REPLACE_ME
-vault_opencode_server_password: REPLACE_ME
 vault_dev_password_hash: REPLACE_ME
+vault_authelia_password_hash: REPLACE_ME
+vault_authelia_session_secret: REPLACE_ME
+vault_authelia_storage_encryption_key: REPLACE_ME
+vault_authelia_redis_password: REPLACE_ME

@@ -6,12 +6,23 @@
   become: true
   vars:
     ansible_become_password: "{{ vault_dev_password }}"
+    authelia_domain: "auth.{{ root_domain }}"
+    opencode_domain: "opencode.{{ root_domain }}"
+    authelia_url: "https://{{ authelia_domain }}"
+    opencode_url: "https://{{ opencode_domain }}"
+    authelia_config_dir: "{{ authelia_dir }}/config"
+    authelia_data_dir: "{{ authelia_dir }}/data"
 
   handlers:
     - name: Restart opencode
       ansible.builtin.service:
         name: opencode
         state: restarted
+
+    - name: Recreate authelia container
+      ansible.builtin.command:
+        cmd: docker compose up -d --force-recreate authelia
+        chdir: "{{ authelia_dir }}"
 
     - name: Restart caddy
       ansible.builtin.service:
@@ -32,9 +43,14 @@
           - server_timezone | length > 0
           - swapfile_path | length > 0
           - (swapfile_size_mb | int) > 0
-          - opencode_domain | length > 0
+          - root_domain | length > 0
+          - authelia_username | length > 0
+          - authelia_dir | length > 0
           - vault_dev_password != 'REPLACE_ME'
-          - vault_opencode_server_password != 'REPLACE_ME'
+          - vault_authelia_password_hash != 'REPLACE_ME'
+          - vault_authelia_session_secret != 'REPLACE_ME'
+          - vault_authelia_storage_encryption_key != 'REPLACE_ME'
+          - vault_authelia_redis_password != 'REPLACE_ME'
         fail_msg: Fill required site variables and secrets before running site.yml.
 
   tasks:
@@ -200,15 +216,6 @@
         mode: '0644'
       notify: Restart opencode
 
-    - name: Install OpenCode environment file
-      ansible.builtin.template:
-        src: templates/opencode.env.j2
-        dest: /etc/opencode.env
-        owner: root
-        group: root
-        mode: '0600'
-      notify: Restart opencode
-
     - name: Reload systemd manager
       ansible.builtin.systemd_service:
         daemon_reload: true
@@ -218,6 +225,62 @@
         name: opencode
         enabled: true
         state: started
+
+    - name: Create Authelia directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ authelia_dir }}"
+          mode: '0755'
+        - path: "{{ authelia_config_dir }}"
+          mode: '0750'
+        - path: "{{ authelia_data_dir }}"
+          mode: '0750'
+
+    - name: Install Authelia compose file
+      ansible.builtin.template:
+        src: templates/authelia/docker-compose.yml.j2
+        dest: "{{ authelia_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0640'
+      notify: Recreate authelia container
+
+    - name: Install Authelia configuration
+      ansible.builtin.template:
+        src: templates/authelia/configuration.yml.j2
+        dest: "{{ authelia_config_dir }}/configuration.yml"
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Recreate authelia container
+
+    - name: Install Authelia users database
+      ansible.builtin.template:
+        src: templates/authelia/users.yml.j2
+        dest: "{{ authelia_config_dir }}/users.yml"
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Recreate authelia container
+
+    - name: Start Authelia compose stack
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ authelia_dir }}"
+      register: authelia_compose_up
+      changed_when: >-
+        'Pulling' in authelia_compose_up.stdout or
+        'Creating' in authelia_compose_up.stdout or
+        'Created' in authelia_compose_up.stdout or
+        'Starting' in authelia_compose_up.stdout or
+        'Started' in authelia_compose_up.stdout or
+        'Recreating' in authelia_compose_up.stdout or
+        'Recreated' in authelia_compose_up.stdout
 
     - name: Install Caddy
       ansible.builtin.apt:
@@ -242,22 +305,66 @@
     - name: Flush service handlers
       ansible.builtin.meta: flush_handlers
 
-    - name: Verify OpenCode requires password locally
-      ansible.builtin.uri:
-        url: http://127.0.0.1:4096/
-        status_code:
-          - 401
-      register: opencode_local_check
-      retries: 10
-      delay: 3
-      until: opencode_local_check.status == 401
+    - name: Wait for OpenCode localhost port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 4096
+        timeout: 60
 
-    - name: Verify public HTTPS endpoint responds
+    - name: Wait for Authelia localhost port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9091
+        timeout: 60
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Verify Caddy and OpenCode services are running
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services.get('caddy.service', {}).state | default('') == 'running'
+          - ansible_facts.services.get('opencode.service', {}).state | default('') == 'running'
+        fail_msg: Caddy and OpenCode must both be running after deployment.
+
+    - name: Verify public Authelia endpoint responds
       ansible.builtin.uri:
-        url: "https://{{ opencode_domain }}/"
+        url: "{{ authelia_url }}/"
+        follow_redirects: none
         status_code:
-          - 401
+          - 200
+          - 302
+      register: authelia_https_check
+      retries: 10
+      delay: 6
+      until: authelia_https_check.status in [200, 302]
+
+    - name: Verify public OpenCode endpoint requires Authelia session
+      ansible.builtin.uri:
+        url: "{{ opencode_url }}/"
+        follow_redirects: none
+        status_code:
+          - 302
+          - 303
+          - 307
+          - 308
       register: opencode_https_check
       retries: 10
       delay: 6
-      until: opencode_https_check.status == 401
+      until: >-
+        (opencode_https_check.status | int) in [302, 303, 307, 308] and
+        authelia_domain in (opencode_https_check.location | default(''))
+
+    - name: Check OpenCode listen socket
+      ansible.builtin.command:
+        cmd: "ss -ltn '( sport = :4096 )'"
+      register: opencode_socket_check
+      changed_when: false
+
+    - name: Verify OpenCode listens only on localhost
+      ansible.builtin.assert:
+        that:
+          - opencode_socket_check.stdout is search('127\\.0\\.0\\.1:4096')
+          - opencode_socket_check.stdout is not search('0\\.0\\.0\\.0:4096')
+          - opencode_socket_check.stdout is not search('\\[::\\]:4096')
+        fail_msg: OpenCode must listen only on 127.0.0.1:4096.
