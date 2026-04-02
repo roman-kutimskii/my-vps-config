@@ -19,6 +19,11 @@
         name: opencode
         state: restarted
 
+    - name: Recreate authelia container
+      ansible.builtin.command:
+        cmd: docker compose up -d --force-recreate authelia
+        chdir: "{{ authelia_dir }}"
+
     - name: Restart caddy
       ansible.builtin.service:
         name: caddy
@@ -243,6 +248,7 @@
         owner: root
         group: root
         mode: '0640'
+      notify: Recreate authelia container
 
     - name: Install Authelia configuration
       ansible.builtin.template:
@@ -251,6 +257,7 @@
         owner: root
         group: root
         mode: '0600'
+      notify: Recreate authelia container
 
     - name: Install Authelia users database
       ansible.builtin.template:
@@ -259,6 +266,7 @@
         owner: root
         group: root
         mode: '0600'
+      notify: Recreate authelia container
 
     - name: Start Authelia compose stack
       ansible.builtin.command:
