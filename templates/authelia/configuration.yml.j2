@@ -1,4 +1,6 @@
 authentication_backend:
+  password_reset:
+    disable: true
   file:
     path: /config/users.yml
     watch: false
@@ -33,6 +35,10 @@ server:
     authz:
       forward-auth:
         implementation: ForwardAuth
+
+notifier:
+  filesystem:
+    filename: /data/notification.txt
 
 log:
   level: info

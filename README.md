@@ -9,6 +9,7 @@
 - `OpenCode` запускается как `systemd`-сервис и слушает только `127.0.0.1:4096`
 - `Authelia` + `Redis` запускаются через `docker compose`
 - `Authelia` использует file-based users backend, `SQLite` для storage, `Redis` для session storage
+- `Authelia` использует filesystem notifier и отключенный password reset для минимального one-factor setup
 - `Caddy` завершает TLS, публикует `auth.<root_domain>` и защищает `opencode.<root_domain>` через `forward_auth`
 
 ## Доменная модель
